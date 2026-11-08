@@ -22,7 +22,7 @@ echo "▶ 다운로드: Wan-AI/Wan2.2-TI2V-5B → $RAW"
 
 # mlx-video 버전에 따라 변환 모듈 경로가 다름
 CONV=""
-for m in mlx_video.convert_wan mlx_video.wan_2.convert; do
+for m in mlx_video.models.wan_2.convert mlx_video.wan_2.convert mlx_video.convert_wan; do
   if "$PY" -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('$m') else 1)" 2>/dev/null; then CONV="$m"; break; fi
 done
 [[ -n "$CONV" ]] || { echo "✗ mlx-video 변환 모듈을 찾지 못했습니다: $PY -m mlx_video --help 로 확인"; exit 1; }

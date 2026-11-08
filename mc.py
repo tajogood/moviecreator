@@ -34,6 +34,8 @@ except ModuleNotFoundError:  # Python < 3.11
     sys.exit("Python 3.11 이상이 필요합니다. ./setup.sh 로 만든 .venv 를 쓰거나 ./mc 래퍼로 실행하세요.")
 
 ROOT = Path(__file__).resolve().parent
+# mlx-video 버전에 따라 Wan 생성 모듈 위치가 다르다 (최신 → 구버전 순)
+WAN_GEN_MODULES = ("mlx_video.models.wan_2.generate", "mlx_video.wan_2.generate", "mlx_video.generate_wan")
 IS_MAC = platform.system() == "Darwin"
 
 
@@ -168,13 +170,17 @@ class Project:
 
 # ───────────────────────── mlx-video 감지 ─────────────────────────
 
+def _has_module(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except ModuleNotFoundError:
+        return False
+
+
 def mlx_video_module() -> str:
-    for mod in ("mlx_video.wan_2.generate", "mlx_video.generate_wan"):
-        try:
-            if importlib.util.find_spec(mod):
-                return mod
-        except ModuleNotFoundError:
-            continue
+    for mod in WAN_GEN_MODULES:
+        if _has_module(mod):
+            return mod
     die("mlx-video 의 Wan 생성 모듈을 찾지 못했습니다. ./setup.sh 를 실행했는지, .venv 로 실행 중인지 확인하세요.")
     return ""
 
@@ -229,7 +235,7 @@ def memory_check() -> None:
 
 def generate_clip(proj: Project, shot: dict, mode: str, seed: int, out: Path, dry: bool) -> None:
     rc = CFG[mode]
-    module = mlx_video_module() if not dry else "mlx_video.wan_2.generate"
+    module = mlx_video_module() if not dry else WAN_GEN_MODULES[0]
     flags = mlx_video_flags(module) if not dry else {
         "steps": "--steps", "image": "--image", "negative": "--negative-prompt",
         "frames": "--num-frames", "output": "--output-path", "seed": "--seed"}
@@ -311,7 +317,7 @@ def cmd_doctor(a) -> None:
     for t in ("ffmpeg", "ffprobe", CFG["keyframe"]["command"]):
         row(t, shutil.which(t), shutil.which(t) or "없음 → ./setup.sh")
     try:
-        mod = next(m for m in ("mlx_video.wan_2.generate", "mlx_video.generate_wan") if importlib.util.find_spec(m))
+        mod = next(m for m in WAN_GEN_MODULES if _has_module(m))
         row("mlx-video", True, mod)
     except (StopIteration, ModuleNotFoundError):
         row("mlx-video", False, "없음 → ./setup.sh")

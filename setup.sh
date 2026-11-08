@@ -41,13 +41,18 @@ RIFE_VER="20221029"
 if [[ ! -x tools/rife/rife-ncnn-vulkan ]]; then
   say "rife-ncnn-vulkan ${RIFE_VER} 다운로드"
   mkdir -p tools && tmp="$(mktemp -d)"
-  curl -fL -o "$tmp/rife.zip" \
-    "https://github.com/nihui/rife-ncnn-vulkan/releases/download/${RIFE_VER}/rife-ncnn-vulkan-${RIFE_VER}-macos.zip"
-  unzip -q "$tmp/rife.zip" -d "$tmp"
-  rm -rf tools/rife && mv "$tmp/rife-ncnn-vulkan-${RIFE_VER}-macos" tools/rife
+  if curl -fL --retry 5 --retry-delay 10 --retry-all-errors -o "$tmp/rife.zip" \
+    "https://github.com/nihui/rife-ncnn-vulkan/releases/download/${RIFE_VER}/rife-ncnn-vulkan-${RIFE_VER}-macos.zip"; then
+    unzip -q "$tmp/rife.zip" -d "$tmp"
+    D="$tmp/rife-ncnn-vulkan-${RIFE_VER}-macos"
+    mkdir -p tools/rife   # 바이너리 + v4.6 모델만 보관 (전체 437MB 중 약 35MB)
+    cp "$D/rife-ncnn-vulkan" "$D/LICENSE" tools/rife/ && cp -R "$D/rife-v4.6" tools/rife/
+    xattr -dr com.apple.quarantine tools/rife 2>/dev/null || true
+    chmod +x tools/rife/rife-ncnn-vulkan
+  else
+    warn "RIFE 다운로드 실패 (GitHub 일시 오류일 수 있음) — 나중에 ./setup.sh 를 다시 실행하세요. 그 전까지는 프레임 복제로 30fps 변환."
+  fi
   rm -rf "$tmp"
-  xattr -dr com.apple.quarantine tools/rife 2>/dev/null || true
-  chmod +x tools/rife/rife-ncnn-vulkan
 fi
 
 chmod +x mc scripts/*.sh
