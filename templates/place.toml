@@ -1,0 +1,66 @@
+# 장소 홍보 30초 릴스 (카페·호텔·매장, 7컷: 3+4+5+4+4+5+5)
+# 원칙: 실제 장소 사진을 키 이미지로 쓰세요 → ./mc photo <프로젝트> 01 ~/Pictures/exterior.jpg
+# AI로 만든 공간을 실제 장소처럼 홍보하면 오인 광고가 될 수 있습니다.
+
+title = "장소 홍보"
+target_seconds = 30
+# music = "music/track.mp3"
+
+style_suffix = "Cinematic commercial interior and architecture film, smooth gimbal movement, filmic warm color grade, natural light. Vertical 9:16 Instagram reel framing. No people's faces, no text, no signage, no watermark."
+keyframe_suffix = "Vertical 9:16 architectural and interior photography, cinematic natural light, no text, no signage, no watermark."
+
+[[shots]]
+id = "01"
+seconds = 3
+seed = 42
+role = "훅"
+keyframe_prompt = "Exterior of a small minimalist cafe with large glass windows and warm interior lights at golden hour, quiet street, trees."
+prompt = "Exterior of a minimalist cafe at golden hour as the warm interior lights flicker on behind large glass windows. Drone-like slow descent with a gentle push-in toward the entrance. Warm golden light against a soft blue sky. Mood: inviting, magical. Entrance centered."
+
+[[shots]]
+id = "02"
+seconds = 4
+seed = 7
+role = "진입"
+keyframe_prompt = "View through an open glass door into a bright cafe interior with light oak tables and a long concrete counter."
+prompt = "Through the open glass door into the bright cafe interior. Camera tracks slowly forward through the doorway. Soft daylight spilling inside. Mood: welcoming. Strong central perspective toward the counter."
+
+[[shots]]
+id = "03"
+seconds = 5
+seed = 1234
+role = "공간"
+keyframe_prompt = "Interior of a quiet minimalist cafe with light oak tables, linen curtains and a long concrete counter, morning sunlight through tall windows, dust in light beams."
+prompt = "Quiet minimalist cafe interior, morning sunlight streaming through tall windows, dust particles floating in the light beams, linen curtains gently moving. Camera glides slowly from left to right at table height with a gentle forward dolly. Mood: peaceful, slow living. Deep perspective with leading lines toward the window."
+
+[[shots]]
+id = "04"
+seconds = 4
+seed = 99
+role = "디테일"
+keyframe_prompt = "Close-up of a pour-over coffee being made on the counter, ceramic cup, pendant lamp glowing softly in the background."
+prompt = "Close-up of hot water slowly pouring over coffee grounds into a ceramic cup, steam rising, a pendant lamp glowing in the background. Slow rack focus from the background lamp to the cup. Warm practical lighting. Mood: crafted, sensory. Cup in the lower center."
+
+[[shots]]
+id = "05"
+seconds = 4
+seed = 5
+role = "경험"
+keyframe_prompt = "Over-the-shoulder view of a guest reading a book at a window seat with a latte, face not visible, soft daylight."
+prompt = "Over-the-shoulder view of a guest turning a page of a book at a sunny window seat, a latte beside them. Gentle handheld drift. Soft diffused daylight. Mood: relaxed, personal. Face never visible, hands and book in frame."
+
+[[shots]]
+id = "06"
+seconds = 5
+seed = 42
+role = "시그니처"
+keyframe_prompt = "A rooftop terrace of the cafe with wooden chairs and plants overlooking the city at sunset."
+prompt = "Rooftop terrace with wooden chairs and potted plants overlooking the city at sunset, leaves swaying in a light breeze. Slow tilt up from the table to the skyline. Golden backlight with soft haze. Mood: open, memorable. Horizon on the upper third."
+
+[[shots]]
+id = "07"
+seconds = 5
+seed = 7
+role = "엔드카드"
+keyframe_prompt = "Exterior of the cafe at blue hour, glowing warm windows, empty quiet street, wide shot with clean sky in the upper third."
+prompt = "The cafe exterior at blue hour with warm glowing windows and an empty quiet street. Slow camera pull-back. Cool blue ambient light with warm window light. Mood: calm, lingering. Building in the lower half, clean sky in the upper third reserved for titles."

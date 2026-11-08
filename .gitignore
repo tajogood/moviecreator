@@ -1,0 +1,18 @@
+# 대용량·로컬 전용
+.venv/
+models/
+tools/
+logs/
+music/
+input/
+
+# 프로젝트 산출물 (project.toml 만 버전 관리)
+projects/*/keyframes/
+projects/*/drafts/
+projects/*/clips/
+projects/*/work/
+projects/*/final/
+
+__pycache__/
+*.pyc
+.DS_Store

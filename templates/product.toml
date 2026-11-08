@@ -1,0 +1,66 @@
+# 제품 홍보 30초 릴스 (7컷: 3+4+4+5+4+5+5)
+# prompt: 영상 프롬프트(움직임·카메라 중심) / keyframe_prompt: 키 이미지(mflux) 프롬프트
+# 실제 제품 사진이 있으면: ./mc photo <프로젝트> 01 ~/Pictures/product.jpg  (생성보다 형태 왜곡이 적음)
+
+title = "제품 홍보"
+target_seconds = 30
+# music = "music/track.mp3"
+
+style_suffix = "Premium commercial product film, shot on cinema camera, shallow depth of field, crisp detail, natural motion blur, consistent warm cinematic color grade. Vertical 9:16 Instagram reel framing. No text, no logos, no watermark."
+keyframe_suffix = "Vertical 9:16 premium commercial product photography, cinematic lighting, shallow depth of field, ultra detailed, no text, no logo, no watermark."
+
+[[shots]]
+id = "01"
+seconds = 3
+seed = 42
+role = "훅"
+keyframe_prompt = "A matte black stainless-steel tumbler emerging from darkness on a wet slate surface, a single thin beam of warm light grazing its edge, deep black background."
+prompt = "A matte black stainless-steel tumbler in darkness; a thin beam of warm light slowly sweeps across it, revealing its silhouette and edges. Static camera with an extremely slow push-in. Low-key lighting, strong rim light. Mood: mysterious, premium. Product centered in the lower two-thirds."
+
+[[shots]]
+id = "02"
+seconds = 4
+seed = 7
+role = "디테일 ①"
+keyframe_prompt = "Extreme macro of brushed stainless-steel texture and a precision-machined lid edge, fine hairline finish, soft specular highlight."
+prompt = "Extreme macro of brushed steel texture and the precision lid edge; a soft highlight glides slowly along the surface. Slow lateral macro slide. Soft directional studio light. Mood: precise, crafted. Texture fills the frame."
+
+[[shots]]
+id = "03"
+seconds = 4
+seed = 1234
+role = "디테일 ②"
+keyframe_prompt = "Close-up of the tumbler lid being opened, a thin wisp of steam about to rise, dark warm background."
+prompt = "Close-up as the lid gently opens and a thin wisp of steam rises and curls upward. Static camera, only the subject moves. Warm backlight catching the steam. Mood: comforting, satisfying. Lid in the upper center, negative space around."
+
+[[shots]]
+id = "04"
+seconds = 5
+seed = 42
+role = "라이프스타일"
+keyframe_prompt = "A hand reaching for the black tumbler on a walnut desk beside a laptop and notebook, soft morning window light, no face visible."
+prompt = "A hand reaches in and lifts the tumbler from a walnut desk beside a notebook, morning light streaming through a window. Subtle handheld camera with gentle drift. Soft natural window light. Mood: calm productive morning. Face never visible, hand and product in the center."
+
+[[shots]]
+id = "05"
+seconds = 4
+seed = 99
+role = "히어로"
+keyframe_prompt = "The black tumbler on a round stone pedestal, subtle reflections, gradient dark charcoal background, rim lights on both sides."
+prompt = "The tumbler stands on a stone pedestal while reflections slide across its surface. Camera performs a slow, smooth 90-degree orbit at eye level. Low-key studio lighting with soft rim lights and a warm amber kicker. Mood: confident, iconic. Product perfectly centered."
+
+[[shots]]
+id = "06"
+seconds = 5
+seed = 5
+role = "분위기"
+keyframe_prompt = "Wide shot of a cozy minimalist room by a large window at golden hour, the tumbler small on a side table, dust particles in sunbeams."
+prompt = "Wide cozy minimalist room at golden hour, dust particles floating in sunbeams, sheer curtains moving softly, the tumbler resting on a side table. Slow camera pull-back. Warm golden backlight, soft haze. Mood: serene, aspirational. Product small in the lower third, generous space above."
+
+[[shots]]
+id = "07"
+seconds = 5
+seed = 42
+role = "엔드카드"
+keyframe_prompt = "The black tumbler on a dark wet slate surface, centered in the lower half, large clean dark negative space in the upper third for titles, elegant rim light."
+prompt = "The tumbler on wet slate with a few droplets slowly sliding down its side, faint steam rising. Static locked-off camera. Elegant rim light, deep shadows. Mood: premium, final. Product in the lower half with clean empty upper third reserved for titles added in editing."

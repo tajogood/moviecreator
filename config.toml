@@ -1,0 +1,46 @@
+# moviecreator 전역 설정
+# 경로는 이 저장소 루트 기준 상대경로입니다.
+
+[paths]
+models_raw = "models/raw"                  # Hugging Face 원본 가중치
+wan_model  = "models/mlx/wan22_ti2v5b_q8"  # MLX 변환·양자화된 Wan2.2 TI2V-5B
+rife_dir   = "tools/rife"                  # rife-ncnn-vulkan 바이너리 폴더
+projects   = "projects"
+logs       = "logs"
+
+[video]
+# Wan2.2 TI2V-5B 규칙: 24fps, 프레임 수 = 4n+1, 가로·세로 32의 배수
+native_fps = 24
+max_frames = 121
+cooldown_seconds = 20        # 컷 사이 쿨다운(발열 완화)
+min_free_memory_pct = 20     # macOS memory_pressure 여유율이 이보다 낮으면 경고
+
+[draft]
+width = 480
+height = 864
+frames = 49
+steps = 20
+
+[final]
+width = 704
+height = 1280
+steps = 40
+extra_seconds = 1            # 편집 여유분: 컷 길이 + 1초 생성 (최대 max_frames)
+
+[keyframe]
+command = "mflux-generate"
+model = "schnell"            # schnell = Apache 2.0 (상업 이용 가능)
+quantize = 8
+steps = 4
+width = 704
+height = 1280
+
+[output]
+width = 1080
+height = 1920
+fps = 30
+crf = 16
+preset = "slow"
+sharpen = "unsharp=5:5:0.4"
+rife_model = "rife-v4.6"
+audio_loudness = -14         # LUFS (릴스 권장 수준)

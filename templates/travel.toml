@@ -1,0 +1,65 @@
+# 여행 홍보 30초 릴스 (7컷: 3+4+4+4+5+5+5)
+# 실제 여행지 사진이 있으면 키 이미지로 쓰는 것이 원칙입니다 → ./mc photo <프로젝트> 02 ~/Pictures/landmark.jpg
+
+title = "여행 홍보"
+target_seconds = 30
+# music = "music/track.mp3"
+
+style_suffix = "Cinematic travel commercial, anamorphic look, rich but natural colors, smooth drone-like motion, emotional and aspirational. Vertical 9:16 Instagram reel framing. No text, no watermark."
+keyframe_suffix = "Vertical 9:16 cinematic travel photography, golden natural light, no text, no watermark."
+
+[[shots]]
+id = "01"
+seconds = 3
+seed = 42
+role = "훅"
+keyframe_prompt = "View through an airplane window of clouds parting over a turquoise coastline and a small coastal city, wing tip visible."
+prompt = "Through an airplane window, clouds drift apart to reveal a turquoise coastline and a small coastal city below. Static camera, only the clouds move. Bright soft daylight. Mood: anticipation, wonder. Window frame around the view."
+
+[[shots]]
+id = "02"
+seconds = 4
+seed = 7
+role = "도착"
+keyframe_prompt = "Wide shot of a historic hilltop old town with terracotta roofs and a church tower, sea in the background, morning light."
+prompt = "Wide shot of a historic hilltop old town with terracotta roofs and a church tower above the sea. Drone-like slow forward flight toward the town. Soft morning sunlight. Mood: arrival, awe. Tower on the vertical center line."
+
+[[shots]]
+id = "03"
+seconds = 4
+seed = 1234
+role = "로컬"
+keyframe_prompt = "Close-up of steaming local street food on a market stall, warm lights, blurred busy market background."
+prompt = "Close-up of steaming local street food being served at a market stall, steam curling up, blurred busy market behind. Gentle handheld slide. Warm practical market lights. Mood: lively, delicious. Food in the lower center."
+
+[[shots]]
+id = "04"
+seconds = 4
+seed = 99
+role = "걷기"
+keyframe_prompt = "A traveler seen from behind walking through a narrow cobblestone alley with flowers on the walls, late afternoon light."
+prompt = "A traveler seen from behind walks slowly through a narrow cobblestone alley with flowers on the walls. Camera follows smoothly from behind at a steady distance. Warm late-afternoon side light. Mood: curiosity, freedom. Traveler in the center, face never visible."
+
+[[shots]]
+id = "05"
+seconds = 5
+seed = 5
+role = "절경"
+keyframe_prompt = "A coastal cliff path above a deep blue sea, tall grass, rocky shore, dramatic clouds, wide landscape."
+prompt = "Coastal cliff path above a deep blue sea, waves rolling against dark rocks, tall grass swaying in the wind, seabirds gliding in the distance. Very slow horizontal pan. Soft hazy daylight. Mood: vast, peaceful. Horizon on the upper third."
+
+[[shots]]
+id = "06"
+seconds = 5
+seed = 42
+role = "감성"
+keyframe_prompt = "A lone traveler seen from behind on a coastal cliff at sunset, orange sun near the horizon, lens flare, soft haze over the sea."
+prompt = "A lone traveler seen from behind stands on a coastal cliff at sunset as the wind moves their jacket and the tall grass. Camera slowly rises and pushes forward over the traveler's shoulder toward the horizon. Golden-hour backlight, gentle lens flare. Mood: freedom, emotional. Traveler in the lower third."
+
+[[shots]]
+id = "07"
+seconds = 5
+seed = 7
+role = "엔드카드"
+keyframe_prompt = "Night skyline of the coastal city with glowing harbor lights reflecting on calm water, wide shot, clean dark sky in the upper third."
+prompt = "Night view of the coastal city, harbor lights shimmering on calm water, a few boats gently rocking. Slow pull-back with a gentle rise. Deep blue night with warm city lights. Mood: lingering, dreamy. City in the lower half, clean dark sky in the upper third reserved for titles."
