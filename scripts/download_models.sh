@@ -32,6 +32,6 @@ echo "▶ 변환: $CONV (${BITS}bit) → $OUT"
   --model-version 2.2 --quantize --bits "$BITS" --group-size 64
 
 # config.toml 의 모델 경로를 이번 변환본으로 맞춤
-sed -i '' -E "s#^wan_model *=.*#wan_model  = \"${OUT}\"  # download_models.sh 가 설정#" config.toml
+sed -i '' -E "s|^wan_model *=.*|wan_model  = \"${OUT}\"  # download_models.sh 가 설정|" config.toml
 echo "✓ 완료: $OUT"
 echo "  원본($RAW)은 변환 확인 후 외장 SSD로 옮겨도 됩니다."
