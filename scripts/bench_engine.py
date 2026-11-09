@@ -23,7 +23,9 @@ steps = int(m.get("steps") or mc.CFG["quality"][quality]["steps"])
 out_dir = ROOT / "logs" / "bench"
 out_dir.mkdir(parents=True, exist_ok=True)
 
-proc = subprocess.Popen([sys.executable, str(ROOT / "web" / "engine.py")], stdin=subprocess.PIPE,
+import os
+env = dict(os.environ, MC_FREE_BEFORE_DECODE="1" if mc.CFG.get("engine", {}).get("free_before_decode", True) else "0")
+proc = subprocess.Popen([sys.executable, str(ROOT / "web" / "engine.py")], stdin=subprocess.PIPE, env=env,
                         stdout=subprocess.PIPE, text=True, bufsize=1, cwd=ROOT)
 print(json.loads(proc.stdout.readline()))
 prompts = ["A matte black stainless-steel tumbler on wet slate, steam rising, slow orbit camera, warm rim light. "

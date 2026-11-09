@@ -37,6 +37,8 @@ import mlx.nn as nn  # noqa: E402
 import numpy as np  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
+FREE_BEFORE_DECODE = os.environ.get("MC_FREE_BEFORE_DECODE", "1") != "0"
+mx.set_cache_limit(int(float(os.environ.get("MC_CACHE_LIMIT_GB", "2")) * 2**30))
 CACHE = ROOT / "models" / "cache"
 DMD_SIGMAS = [1.0, 0.757, 0.522, 0.0]
 
@@ -315,7 +317,12 @@ class Engine:
                     latents = (1.0 - mask) * z_img + mask * latents
                 mx.eval(latents)
         timings["denoise"] = round(time.time() - t3, 1)
-        del kv, rope, ctx_in, emb
+        del kv, rope, ctx_in, emb, m
+        # 디코딩 전 메모리 확보: 24GB 맥에서는 DiT·텍스트 인코더를 내려야 VAE 디코딩이 스왑 없이 돈다.
+        # (다시 올리는 데 DiT 1초, 8bit 텍스트 인코더 수 초 — 같은 프롬프트는 캐시라 불필요)
+        if FREE_BEFORE_DECODE:
+            self.unload("dit")
+            self.unload("t5")
         gc.collect()
         mx.clear_cache()
         self._check()

@@ -91,7 +91,8 @@ class EngineClient:
         if self.alive():
             return
         env = dict(os.environ, PYTHONUNBUFFERED="1",
-                   MC_IDLE_UNLOAD_MIN=str(mc.CFG.get("engine", {}).get("idle_unload_minutes", 30)))
+                   MC_IDLE_UNLOAD_MIN=str(mc.CFG.get("engine", {}).get("idle_unload_minutes", 30)),
+                   MC_FREE_BEFORE_DECODE="1" if mc.CFG.get("engine", {}).get("free_before_decode", True) else "0")
         log = open(ROOT / "logs" / "engine.log", "a")
         script = os.environ.get("MC_ENGINE_SCRIPT") or str(Path(__file__).with_name("engine.py"))
         self.proc = subprocess.Popen([sys.executable, script],
