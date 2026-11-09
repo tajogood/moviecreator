@@ -361,7 +361,8 @@ class Engine:
         del kv, rope, ctx_in, emb, m
         # 디코딩 전 메모리 확보: 24GB 맥에서는 DiT·텍스트 인코더를 내려야 VAE 디코딩이 스왑 없이 돈다.
         # (다시 올리는 데 DiT 1초, 8bit 텍스트 인코더 수 초 — 같은 프롬프트는 캐시라 불필요)
-        if FREE_BEFORE_DECODE:
+        # 경량 디코더(tae)는 메모리를 거의 안 써서 모델을 그대로 상주시킨다.
+        if FREE_BEFORE_DECODE and not str(job.get("decoder") or "vae").startswith("tae"):
             self.unload("dit")
             self.unload("t5")
         gc.collect()
