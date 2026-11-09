@@ -74,6 +74,8 @@ dir = "models/mlx/wan22_ti2v5b_q8"
 
 [engine]
 idle_unload_minutes = 30     # 이 시간 동안 작업이 없으면 모델을 메모리에서 내림
+vae_tile_px = 384            # 영상 변환 타일 크기 (메모리 많으면 512, 0=mlx-video 자동)
+vae_tile_frames = 32         # 영상 변환 타일 프레임 수 (자동 설정은 64 → 24GB 에서 스왑)
 free_before_decode = true    # 24GB 맥: 영상 변환(VAE) 전에 DiT·텍스트 인코더를 내려 스왑 방지 (32GB 이상이면 false 가능)
 
 [keyframe]

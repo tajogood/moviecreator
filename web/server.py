@@ -92,6 +92,8 @@ class EngineClient:
             return
         env = dict(os.environ, PYTHONUNBUFFERED="1",
                    MC_IDLE_UNLOAD_MIN=str(mc.CFG.get("engine", {}).get("idle_unload_minutes", 30)),
+                   MC_VAE_TILE_PX=str(mc.CFG.get("engine", {}).get("vae_tile_px", 384)),
+                   MC_VAE_TILE_FRAMES=str(mc.CFG.get("engine", {}).get("vae_tile_frames", 32)),
                    MC_FREE_BEFORE_DECODE="1" if mc.CFG.get("engine", {}).get("free_before_decode", True) else "0")
         log = open(ROOT / "logs" / "engine.log", "a")
         script = os.environ.get("MC_ENGINE_SCRIPT") or str(Path(__file__).with_name("engine.py"))

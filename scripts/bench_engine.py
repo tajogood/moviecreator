@@ -24,7 +24,9 @@ out_dir = ROOT / "logs" / "bench"
 out_dir.mkdir(parents=True, exist_ok=True)
 
 import os
-env = dict(os.environ, MC_FREE_BEFORE_DECODE="1" if mc.CFG.get("engine", {}).get("free_before_decode", True) else "0")
+E = mc.CFG.get("engine", {})
+env = dict(os.environ, MC_VAE_TILE_PX=str(E.get("vae_tile_px", 384)), MC_VAE_TILE_FRAMES=str(E.get("vae_tile_frames", 32)),
+           MC_FREE_BEFORE_DECODE="1" if mc.CFG.get("engine", {}).get("free_before_decode", True) else "0")
 proc = subprocess.Popen([sys.executable, str(ROOT / "web" / "engine.py")], stdin=subprocess.PIPE, env=env,
                         stdout=subprocess.PIPE, text=True, bufsize=1, cwd=ROOT)
 print(json.loads(proc.stdout.readline()))

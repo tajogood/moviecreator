@@ -71,6 +71,22 @@ def load_config(model_dir: Path):
     return cfg, quant, dmd, raw
 
 
+def vae_tiling(TilingConfig, height: int, width: int, frames: int):
+    """24GB 맥용 VAE 타일 크기. 기본(512px·64프레임)은 float32 에서 20GB 이상을 써서 스왑이 난다."""
+    from mlx_video.models.ltx_2.video_vae.tiling import SpatialTilingConfig, TemporalTilingConfig
+
+    sp = int(os.environ.get("MC_VAE_TILE_PX", "384"))
+    tf = int(os.environ.get("MC_VAE_TILE_FRAMES", "32"))
+    if sp <= 0:
+        return TilingConfig.auto(height, width, frames)
+    spatial = SpatialTilingConfig(tile_size_in_pixels=sp, tile_overlap_in_pixels=64) \
+        if max(height, width) > sp else None
+    temporal = TemporalTilingConfig(tile_size_in_frames=tf, tile_overlap_in_frames=8) if frames > tf + 1 else None
+    if spatial is None and temporal is None:
+        return None
+    return TilingConfig(spatial_config=spatial, temporal_config=temporal)
+
+
 # ───────────────────────── 엔진 ─────────────────────────
 
 class Engine:
@@ -334,7 +350,7 @@ class Engine:
         from mlx_video.models.wan_2.vae22 import denormalize_latents
 
         z = denormalize_latents(latents.transpose(1, 2, 3, 0)[None])
-        tiling = TilingConfig.auto(height, width, frames)
+        tiling = vae_tiling(TilingConfig, height, width, frames)
         video = self.vae_dec.decode_tiled(z, tiling) if tiling is not None else self.vae_dec(z)
         mx.eval(video)
         video = np.array(video[0])
