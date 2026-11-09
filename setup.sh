@@ -57,6 +57,13 @@ if [[ ! -x tools/rife/rife-ncnn-vulkan ]]; then
   rm -rf "$tmp"
 fi
 
+# 5) TAEHV 경량 디코더 가중치 (MIT, madebyollin/taehv)
+mkdir -p tools/taehv
+for n in taew2_2 taew2_2_super; do
+  [[ -f "tools/taehv/$n.safetensors" ]] || curl -fL --retry 5 --retry-all-errors -o "tools/taehv/$n.safetensors" \
+    "https://github.com/madebyollin/taehv/raw/main/safetensors/$n.safetensors" || warn "$n 다운로드 실패 — 표준 화질은 원본 디코더로 대체"
+done
+
 chmod +x mc web.sh MovieCreator.command scripts/*.sh
 mkdir -p models/raw models/mlx projects logs music input
 rm -f tools/.mlx_video_flags.json   # mlx-video 버전이 바뀌었을 수 있으니 옵션 캐시 초기화

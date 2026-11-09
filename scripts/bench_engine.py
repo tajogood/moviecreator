@@ -40,7 +40,8 @@ for i, prompt in enumerate(prompts):
            "t5_source": str(base / "t5_encoder.safetensors"), "vae_path": str(base / "vae.safetensors"),
            "prompt": prompt + " " + mc.ASPECT_PHRASE[aspect], "negative": (ROOT / "prompts/negative.txt").read_text().strip(),
            "image": None, "seed": 42, "output": str(out_dir / f"{model}_{quality}_{i}.mp4"),
-           "width": w, "height": h, "frames": frames, "steps": steps, "sampler": m.get("sampler", "")}
+           "width": w, "height": h, "frames": frames, "steps": steps, "sampler": m.get("sampler", ""),
+           "decoder": mc.CFG.get("decoder", {}).get(quality, "vae")}
     t = time.time()
     proc.stdin.write(json.dumps(job) + "\n")
     proc.stdin.flush()

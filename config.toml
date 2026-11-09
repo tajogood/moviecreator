@@ -78,6 +78,14 @@ vae_tile_px = 384            # 영상 변환 타일 크기 (메모리 많으면 
 vae_tile_frames = 32         # 영상 변환 타일 프레임 수 (자동 설정은 64 → 24GB 에서 스왑)
 free_before_decode = true    # 24GB 맥: 영상 변환(VAE) 전에 DiT·텍스트 인코더를 내려 스왑 방지 (32GB 이상이면 false 가능)
 
+# 영상 변환(디코딩) 방식: 품질별
+#   tae / tae_super : TAEHV 경량 디코더 (수십 초, 약간 부드러움)  — super 가 더 선명
+#   vae             : Wan2.2 원본 VAE (24GB 맥에서 5초 분량에 약 9분, 가장 선명)
+[decoder]
+draft = "tae"
+standard = "tae_super"
+final = "vae"
+
 [keyframe]
 command = "mflux-generate"
 model = "schnell"           # Apache 2.0 (상업 이용 가능)

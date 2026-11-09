@@ -194,6 +194,31 @@ class Engine:
         self.vae_dec = load_vae_decoder(vae_path, self.cfg)
         self.vae_key = key
 
+    def decode_tae(self, latents, variant: str) -> np.ndarray:
+        """TAEHV(Wan2.2용 경량 디코더, PyTorch MPS)로 정규화 상태의 잠재값을 바로 프레임으로."""
+        import torch
+
+        sys.path.insert(0, str(Path(__file__).with_name("vendor")))
+        from taehv import TAEHV
+
+        name = {"tae": "taew2_2", "tae_super": "taew2_2_super"}.get(variant, variant)
+        dev = "mps" if torch.backends.mps.is_available() else "cpu"
+        if getattr(self, "tae_key", None) != name:
+            path = ROOT / "tools" / "taehv" / f"{name}.safetensors"
+            if not path.exists():
+                raise FileNotFoundError(f"경량 디코더 가중치가 없습니다: {path} (./setup.sh 실행)")
+            self.tae = TAEHV(str(path)).to(dev, torch.float16).eval()
+            self.tae_key = name
+        x = torch.from_numpy(np.array(latents.astype(mx.float32)))  # [C,T,H,W] (정규화 상태)
+        x = x.permute(1, 0, 2, 3)[None].to(dev, torch.float16)       # [1,T,C,H,W]
+        with torch.no_grad():
+            v = self.tae.decode_video(x, parallel=False, show_progress_bar=False)  # [1,T',3,H',W'] 0~1
+        out = (v[0].permute(0, 2, 3, 1).float().clamp(0, 1) * 255).round().to(torch.uint8).cpu().numpy()
+        del x, v
+        if dev == "mps":
+            torch.mps.empty_cache()
+        return out
+
     # ── 텍스트
     def encode(self, text: str, t5_source: Path) -> mx.array:
         from mlx_video.models.wan_2.utils import encode_text
@@ -343,20 +368,27 @@ class Engine:
         mx.clear_cache()
         self._check()
 
-        # 디코딩
+        # 디코딩: tae(경량, 수십 초) 또는 vae(원본, 고품질·수 분)
         t4 = time.time()
-        progress("영상 변환 중", 0.80)
-        self.ensure_vae(vae_path)
-        from mlx_video.models.wan_2.vae22 import denormalize_latents
+        decoder = job.get("decoder") or "vae"
+        if decoder.startswith("tae"):
+            progress("영상 변환 중 (경량 디코더)", 0.80)
+            video = self.decode_tae(latents, decoder)
+        else:
+            progress("영상 변환 중 (원본 디코더, 수 분 소요)", 0.80)
+            self.ensure_vae(vae_path)
+            from mlx_video.models.wan_2.vae22 import denormalize_latents
 
-        z = denormalize_latents(latents.transpose(1, 2, 3, 0)[None])
-        tiling = vae_tiling(TilingConfig, height, width, frames)
-        video = self.vae_dec.decode_tiled(z, tiling) if tiling is not None else self.vae_dec(z)
-        mx.eval(video)
-        video = np.array(video[0])
-        video = np.clip((video + 1.0) / 2.0 * 255.0, 0, 255).astype(np.uint8)
+            z = denormalize_latents(latents.transpose(1, 2, 3, 0)[None])
+            tiling = vae_tiling(TilingConfig, height, width, frames)
+            video = self.vae_dec.decode_tiled(z, tiling) if tiling is not None else self.vae_dec(z)
+            mx.eval(video)
+            video = np.array(video[0])
+            video = np.clip((video + 1.0) / 2.0 * 255.0, 0, 255).astype(np.uint8)
+            del z
         timings["decode"] = round(time.time() - t4, 1)
-        del latents, z
+        timings["decoder"] = decoder
+        del latents
         gc.collect()
         mx.clear_cache()
 

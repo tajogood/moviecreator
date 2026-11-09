@@ -194,21 +194,28 @@ def job_params(p: "mc.Project", shot: dict, quality: str, model: str) -> dict:
 
 
 def estimate_job(p: "mc.Project", shot: dict, quality: str, model: str) -> int:
-    """실측 기록이 있으면 픽셀·프레임 비례로, 없으면 기본 공식으로 추정."""
+    """같은 모델·디코더의 실측 기록이 있으면 그 비율로, 없으면 M5 24GB 실측 기준값으로 추정."""
     jp = job_params(p, shot, quality, model)
+    dec = mc.CFG.get("decoder", {}).get(quality, "vae")
     work = jp["width"] * jp["height"] * jp["frames"]
     try:
-        hist = [h for h in json.loads(TIMINGS.read_text()) if h["model"] == model][-12:]
+        hist = [h for h in json.loads(TIMINGS.read_text())
+                if h["model"] == model and h.get("decoder", "vae") == dec and h.get("total")][-12:]
     except Exception:
         hist = []
     if hist:
+        same = sorted(h["total"] for h in hist if h["work"] == work)
+        if same:
+            return int(same[len(same) // 2])
         rate = sorted(h["total"] / h["work"] for h in hist)[len(hist) // 2]
-        same = [h for h in hist if h["work"] == work]
-        return int(sorted(x["total"] for x in same)[len(same) // 2]) if same else int(rate * work)
+        return int(rate * work)
+    # 기준 실측 (M5 24GB, 544x960x121, 빠른 모델): 생성 106초, 원본 VAE 544초
+    ratio = work / (544 * 960 * 121)
+    decode = 544 * ratio if dec == "vae" else (40 if dec == "tae_super" else 25) * ratio
     if model == "fast":
-        ratio = work / (480 * 864 * 49)
-        return int(60 + 90 * ratio)
-    return mc.estimate_seconds(p.aspect, quality, float(shot["seconds"]))
+        return int(10 + 106 * ratio ** 1.3 + decode)
+    steps = jp["steps"]
+    return int(15 + 106 / 3 * 2 * steps * ratio ** 1.3 + decode)   # CFG(2배) × 스텝
 
 
 def record_timing(model: str, params: dict, timings: dict) -> None:
@@ -386,7 +393,8 @@ def run_generate(job: Job) -> None:
     req = {"model_dir": str(mdir), "t5_source": str(base / "t5_encoder.safetensors"),
            "vae_path": str(base / "vae.safetensors"), "prompt": proj.video_prompt(shot),
            "negative": proj.negative(), "image": str(kf) if kf and kf.exists() else None,
-           "seed": seed, "output": str(out), "sampler": m.get("sampler", ""), **params}
+           "seed": seed, "output": str(out), "sampler": m.get("sampler", ""),
+           "decoder": mc.CFG.get("decoder", {}).get(q, "vae"), **params}
     free = mc.memory_free_pct()
     if free is not None and free < mc.CFG["video"]["min_free_memory_pct"]:
         job.add_log(f"⚠ 메모리 여유 {free}% — 다른 앱을 닫으면 빨라집니다")
