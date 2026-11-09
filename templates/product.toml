@@ -3,11 +3,12 @@
 # 실제 제품 사진이 있으면: ./mc photo <프로젝트> 01 ~/Pictures/product.jpg  (생성보다 형태 왜곡이 적음)
 
 title = "제품 홍보"
+description = "제품 홍보 7컷 30초 (훅·디테일·라이프스타일·히어로·엔드카드)"
 target_seconds = 30
 # music = "music/track.mp3"
 
-style_suffix = "Premium commercial product film, shot on cinema camera, shallow depth of field, crisp detail, natural motion blur, consistent warm cinematic color grade. Vertical 9:16 Instagram reel framing. No text, no logos, no watermark."
-keyframe_suffix = "Vertical 9:16 premium commercial product photography, cinematic lighting, shallow depth of field, ultra detailed, no text, no logo, no watermark."
+style_suffix = "Premium commercial product film, shot on cinema camera, shallow depth of field, crisp detail, natural motion blur, consistent warm cinematic color grade. No text, no logos, no watermark."
+keyframe_suffix = "Premium commercial product photography, cinematic lighting, shallow depth of field, ultra detailed, no text, no logo, no watermark."
 
 [[shots]]
 id = "01"

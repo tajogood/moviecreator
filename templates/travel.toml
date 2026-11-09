@@ -2,11 +2,12 @@
 # 실제 여행지 사진이 있으면 키 이미지로 쓰는 것이 원칙입니다 → ./mc photo <프로젝트> 02 ~/Pictures/landmark.jpg
 
 title = "여행 홍보"
+description = "여행 홍보 7컷 30초 (도착·로컬·걷기·절경·감성·엔드카드)"
 target_seconds = 30
 # music = "music/track.mp3"
 
-style_suffix = "Cinematic travel commercial, anamorphic look, rich but natural colors, smooth drone-like motion, emotional and aspirational. Vertical 9:16 Instagram reel framing. No text, no watermark."
-keyframe_suffix = "Vertical 9:16 cinematic travel photography, golden natural light, no text, no watermark."
+style_suffix = "Cinematic travel commercial, anamorphic look, rich but natural colors, smooth drone-like motion, emotional and aspirational. No text, no watermark."
+keyframe_suffix = "Cinematic travel photography, golden natural light, no text, no watermark."
 
 [[shots]]
 id = "01"

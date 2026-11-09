@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111214">
+<title>MovieCreator</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23e8b04b'/><path d='M12 9l12 7-12 7z' fill='%23111214'/></svg>">
+<link rel="stylesheet" href="/static/style.css?v=1">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/" aria-label="홈">
+    <span class="logo">▶</span><span>MovieCreator</span>
+  </a>
+  <div class="top-right">
+    <button class="jobs-btn" id="jobsBtn" hidden>
+      <span class="dot"></span><span id="jobsLabel">작업</span>
+    </button>
+    <button class="ghost small" id="logoutBtn" hidden>로그아웃</button>
+  </div>
+</header>
+
+<main id="app" aria-live="polite"></main>
+
+<aside class="drawer" id="drawer" hidden>
+  <div class="drawer-head">
+    <strong>작업 목록</strong>
+    <span class="muted small">한 번에 하나씩 순서대로 처리합니다</span>
+    <button class="ghost small" id="drawerClose">닫기</button>
+  </div>
+  <div id="jobList"></div>
+</aside>
+
+<div class="toast" id="toast" hidden></div>
+<input type="file" id="filePicker" hidden>
+
+<script src="/static/app.js?v=1"></script>
+</body>
+</html>

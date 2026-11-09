@@ -19,8 +19,8 @@ if ! command -v brew >/dev/null; then
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
-say "Homebrew 패키지: python@3.12 uv ffmpeg git-lfs"
-brew install python@3.12 uv ffmpeg git-lfs
+say "Homebrew 패키지: python@3.12 uv ffmpeg git-lfs cloudflared"
+brew install python@3.12 uv ffmpeg git-lfs cloudflared
 
 # 2) Python 가상환경
 if [[ ! -x .venv/bin/python ]]; then
@@ -31,6 +31,8 @@ say "Python 패키지: mlx-video, huggingface_hub, torch(가중치 변환용)"
 uv pip install --python .venv/bin/python -U "huggingface_hub[cli]" pillow
 uv pip install --python .venv/bin/python -U "git+https://github.com/Blaizzy/mlx-video.git"
 uv pip install --python .venv/bin/python -U torch
+say "웹 UI 패키지: fastapi, uvicorn, tomli-w"
+uv pip install --python .venv/bin/python -U fastapi "uvicorn[standard]" python-multipart tomli-w
 
 # 3) mflux (키 이미지 생성, 격리 설치)
 say "mflux 설치 (uv tool)"
@@ -55,7 +57,7 @@ if [[ ! -x tools/rife/rife-ncnn-vulkan ]]; then
   rm -rf "$tmp"
 fi
 
-chmod +x mc scripts/*.sh
+chmod +x mc web.sh MovieCreator.command scripts/*.sh
 mkdir -p models/raw models/mlx projects logs music input
 rm -f tools/.mlx_video_flags.json   # mlx-video 버전이 바뀌었을 수 있으니 옵션 캐시 초기화
 
@@ -65,6 +67,5 @@ cat <<'EOF'
 
 다음 단계
   1) 모델 다운로드·변환 (~35GB, 한 번만):   ./scripts/download_models.sh
-  2) 새 프로젝트:                           ./mc new my_first --template product
-  3) 시안 → 최종 → 릴스:                    ./mc draft my_first && ./mc final my_first && ./mc reel my_first
+  2) 웹 UI 실행:                            ./web.sh   (또는 MovieCreator.command 더블클릭)
 EOF

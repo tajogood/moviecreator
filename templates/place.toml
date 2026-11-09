@@ -3,11 +3,12 @@
 # AI로 만든 공간을 실제 장소처럼 홍보하면 오인 광고가 될 수 있습니다.
 
 title = "장소 홍보"
+description = "장소 홍보 7컷 30초 (외관·진입·공간·디테일·경험·시그니처)"
 target_seconds = 30
 # music = "music/track.mp3"
 
-style_suffix = "Cinematic commercial interior and architecture film, smooth gimbal movement, filmic warm color grade, natural light. Vertical 9:16 Instagram reel framing. No people's faces, no text, no signage, no watermark."
-keyframe_suffix = "Vertical 9:16 architectural and interior photography, cinematic natural light, no text, no signage, no watermark."
+style_suffix = "Cinematic commercial interior and architecture film, smooth gimbal movement, filmic warm color grade, natural light. No people's faces, no text, no signage, no watermark."
+keyframe_suffix = "Architectural and interior photography, cinematic natural light, no text, no signage, no watermark."
 
 [[shots]]
 id = "01"

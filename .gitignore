@@ -16,3 +16,9 @@ projects/*/final/
 __pycache__/
 *.pyc
 .DS_Store
+
+# 웹 로그인 비밀번호·세션 키
+web.secret.toml
+projects/.trash/
+projects/*/uploads/
+projects/*/takes/

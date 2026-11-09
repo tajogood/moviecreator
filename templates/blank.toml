@@ -1,0 +1,14 @@
+# 빈 프로젝트: AI 컷 1개로 시작. 컷·사진·동영상은 화면에서 추가합니다.
+title = "새 영상"
+description = "빈 프로젝트 — 프롬프트·사진·동영상으로 자유롭게 구성"
+style_suffix = "Cinematic commercial film, smooth camera movement, natural motion blur, rich but natural colors, high detail. No text, no logos, no watermark."
+keyframe_suffix = "Cinematic commercial photography, natural light, high detail, no text, no logo, no watermark."
+
+[[shots]]
+id = "01"
+type = "ai"
+seconds = 5
+seed = 0
+role = "컷 1"
+prompt = ""
+keyframe_prompt = ""
