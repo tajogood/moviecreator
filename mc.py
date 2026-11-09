@@ -328,9 +328,10 @@ class Project:
     def takes(self, sid: str) -> list[dict]:
         out = []
         for f in sorted((self.dir / "takes").glob(f"{sid}_*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
-            m = re.match(rf"{re.escape(sid)}_(draft|standard|final)_s(\d+)_", f.name)
+            m = re.match(rf"{re.escape(sid)}_(draft|standard|final)(?:-(\w+))?_s(\d+)_", f.name)
             out.append({"file": f"takes/{f.name}", "quality": m.group(1) if m else "",
-                        "seed": int(m.group(2)) if m else None, "time": f.stat().st_mtime})
+                        "model": (m.group(2) or "base") if m else "",
+                        "seed": int(m.group(3)) if m else None, "time": f.stat().st_mtime})
         return out
 
     def finals(self) -> list[dict]:

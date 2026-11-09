@@ -79,6 +79,7 @@ $("#logoutBtn").onclick = guard(async () => { await api("/api/logout", { method:
 // ───────── 홈 ─────────
 async function renderHome() {
   state.project = null;
+  state.info = await api("/api/info");
   const list = await api("/api/projects");
   const bad = state.info.doctor.filter((d) => !d.ok && !d.name.includes("선택"));
   app.innerHTML = `
@@ -87,6 +88,7 @@ async function renderHome() {
       <div class="muted small">프롬프트·사진·동영상으로 홍보 영상을 만듭니다. 생성은 이 맥북에서 직접 돌아갑니다.</div></div>
       <a href="#/new"><button class="primary">+ 새 영상 만들기</button></a>
     </div>
+    ${engineLine()}
     ${bad.length ? `<div class="notice" style="margin-bottom:14px"><b>설치 확인 필요:</b> ${bad.map((d) => esc(d.name) + " — " + esc(d.detail)).join(" · ")}</div>` : ""}
     ${list.length ? `<div class="grid">${list.map((p) => `
       <a class="pcard" href="#/p/${encodeURIComponent(p.name)}">
@@ -95,6 +97,16 @@ async function renderHome() {
           <span class="muted small">${arBox(p.aspect)}${esc(p.aspect)} · 컷 ${p.shots}개 · ${Math.round(p.seconds)}초</span></div>
       </a>`).join("")}</div>`
     : `<div class="empty-state">아직 프로젝트가 없습니다.<br><br><a href="#/new"><button class="primary">첫 영상 만들기</button></a></div>`}`;
+  const ub = $("#unloadBtn");
+  if (ub) ub.onclick = guard(async () => { await api("/api/engine/unload", { method: "POST" }); toast("모델을 메모리에서 내렸습니다. 다음 생성 때 다시 올립니다"); setTimeout(renderHome, 1500); });
+}
+
+function engineLine() {
+  const e = state.info.engine || {};
+  if (!e.running) return `<div class="notice" style="margin-bottom:14px">생성 엔진 대기 중 · 첫 생성 때 모델을 메모리에 올립니다 (이후 계속 상주)</div>`;
+  const m = e.dit ? (e.dit.includes("fastwan") ? "빠른 모델" : "원본 모델") : "없음";
+  return `<div class="notice" style="margin-bottom:14px">생성 엔진 실행 중 · 메모리에 올라간 모델: <b>${m}</b>${e.t5 ? " + 텍스트 인코더" : ""} · 사용 메모리 ${e.active_gb ?? "?"}GB
+    <button class="small ghost" id="unloadBtn" style="margin-left:8px">메모리에서 내리기</button></div>`;
 }
 
 // ───────── 새 프로젝트 ─────────
@@ -140,6 +152,7 @@ async function renderEditor(name, keepScroll = false) {
       <input class="ed-title" id="pTitle" value="${esc(p.title)}" maxlength="60" aria-label="제목">
       <div class="ed-bar">
         <label class="f">화면 비율<select id="pAspect">${Object.entries(info.aspects).map(([k, v]) => `<option value="${k}" ${k === p.aspect ? "selected" : ""}>${esc(v.label)}</option>`).join("")}</select></label>
+        <label class="f">생성 모델<select id="pModel">${Object.entries(info.models).map(([k, v]) => `<option value="${k}" ${k === p.model ? "selected" : ""} ${v.available ? "" : "disabled"}>${esc(v.label)}${v.available ? "" : " (미설치)"}</option>`).join("")}</select></label>
         <label class="f">색감<select id="pGrade">${Object.entries(info.grades).map(([k, v]) => `<option value="${k}" ${k === p.grade ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label>
         <label class="f">배경 음악<select id="pMusic"><option value="">없음</option>${p.music_files.map((f) => `<option value="${esc(f)}" ${f === p.music ? "selected" : ""}>${esc(musicName(f))}</option>`).join("")}<option value="__upload">+ 음악 파일 올리기…</option></select></label>
       </div>
@@ -151,10 +164,16 @@ async function renderEditor(name, keepScroll = false) {
     <div class="summary">
       <div><b>${p.shots.length}컷 · ${Math.round(p.total_seconds * 10) / 10}초</b>
         <span class="muted small"> → 최종 ${p.output[0]}×${p.output[1]} · 30fps MP4</span></div>
-      <button class="primary" id="reelBtn" ${busyBySid._reel ? "disabled" : ""}>${busyBySid._reel ? "최종 영상 만드는 중…" : "최종 영상 만들기"}</button>
+      <div class="btns" style="align-items:center">
+        <select id="autoQ" style="width:auto">
+          <option value="standard">표준 화질 (${fmtMin(p.auto_estimates.standard)})</option>
+          <option value="final">고화질 (${fmtMin(p.auto_estimates.final)})</option></select>
+        <button class="primary" id="autoBtn" ${busyBySid._reel ? "disabled" : ""}>${busyBySid._reel ? "최종 영상 만드는 중…" : "바로 최종 영상 만들기"}</button>
+        <button class="ghost small" id="reelBtn" ${busyBySid._reel ? "disabled" : ""} title="이미 만든 컷 영상으로 합치기만">합치기만</button>
+      </div>
     </div>
-    <p class="muted small">AI 컷: 프롬프트만 쓰면 텍스트로, 사진을 넣으면 그 사진에서 움직이는 영상으로 만듭니다. 프롬프트는 영어가 가장 잘 됩니다.
-      <b>시안</b>으로 구도와 움직임을 먼저 보고, 마음에 들면 <b>표준·고화질</b>로 다시 만드세요.</p>
+    <p class="muted small"><b>바로 최종 영상 만들기</b>: 영상이 없는 AI 컷을 모두 생성한 뒤 30fps·음악까지 합쳐 완성본을 만듭니다. 시안 확인은 필요 없습니다.
+      AI 컷은 프롬프트만 쓰면 텍스트로, 사진을 넣으면 그 사진에서 움직이는 영상으로 만듭니다. 프롬프트는 영어가 가장 잘 됩니다.</p>
 
     <div class="shots" id="shots">${p.shots.map((s, i) => (s.type === "video" ? videoCard(p, s, i, busyBySid[s.id]) : aiCard(p, s, i, busyBySid[s.id]))).join("")}</div>
 
@@ -231,7 +250,7 @@ function aiCard(p, s, i, jobs) {
       ${s.takes && s.takes.length ? `<div><div class="muted small" style="margin-bottom:6px">만든 영상 ${s.takes.length}개 · 하나를 채택하면 최종 영상에 쓰입니다</div>
         <div class="takes">${s.takes.map((t) => `<div class="take ${t.file === s.take ? "on" : ""}">
           <video src="${fileUrl(p.name, t.file)}#t=0.1" muted loop playsinline preload="metadata" onmouseenter="this.play()" onmouseleave="this.pause()" onclick="this.paused?this.play():this.pause()"></video>
-          <div class="tl"><span>${esc(state.info.qualities[t.quality]?.label || t.quality)}</span><span>#${t.seed ?? ""}</span></div>
+          <div class="tl"><span>${esc(state.info.qualities[t.quality]?.label || t.quality)}${t.model === "fast" ? "·빠름" : ""}</span><span>#${t.seed ?? ""}</span></div>
           <div class="tb">${t.file === s.take ? `<button disabled>✓ 채택</button>` : `<button data-take="${esc(t.file)}">채택</button>`}
             <button class="ghost" data-seed="${t.seed ?? 0}" title="이 시드로 고정">시드</button>
             <button class="ghost danger" data-delfile="${esc(t.file)}" title="삭제">✕</button></div></div>`).join("")}</div></div>` : ""}
@@ -275,6 +294,15 @@ function bindEditor(p) {
     renderEditor(name, true);
   });
   $("#pGrade").onchange = (e) => patchP({ grade: e.target.value });
+  $("#pModel").onchange = guard(async (e) => { await patchP({ model: e.target.value }); renderEditor(name, true); });
+  $("#autoBtn").onclick = guard(async () => {
+    for (const card of app.querySelectorAll(".shot")) await savePending(card);
+    const q = $("#autoQ").value;
+    const jobs = await api("/api/jobs", { method: "POST", body: { kind: "auto", project: name, quality: q } });
+    const gens = jobs.filter((j) => j.kind === "generate").length;
+    toast(gens ? `${gens}개 컷 생성 → 최종 영상까지 자동으로 진행합니다` : "모든 컷이 준비되어 바로 최종 영상을 만듭니다", false, 5000);
+    await refreshJobs(); renderEditor(name, true);
+  });
   $("#pStyle").onchange = (e) => patchP({ style_suffix: e.target.value });
   $("#pMusic").onchange = guard(async (e) => {
     if (e.target.value === "__upload") {
@@ -397,7 +425,7 @@ async function savePending(card) {
     await api(`/api/projects/${encodeURIComponent(state.project.name)}/shots/${card.dataset.sid}`, { method: "PATCH", body: { [el.dataset.f]: el.value } });
   }
   const pr = card.querySelector('[data-f="prompt"]');
-  if (pr) await api(`/api/projects/${encodeURIComponent(state.project.name)}/shots/${card.dataset.sid}`, { method: "PATCH", body: { prompt: pr.value } });
+  if (pr && pr.value !== pr.defaultValue) await api(`/api/projects/${encodeURIComponent(state.project.name)}/shots/${card.dataset.sid}`, { method: "PATCH", body: { prompt: pr.value } });
 }
 
 // ───────── 파일 선택·업로드 ─────────

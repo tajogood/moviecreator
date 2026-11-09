@@ -56,6 +56,25 @@ standard = [736, 736]
 final = [960, 960]
 output = [1080, 1080]
 
+# 생성 모델 (웹 UI에서 선택)
+[models.fast]
+label = "빠른 모델 (증류 3스텝)"
+short = "빠름"
+description = "FastWan2.2 TI2V-5B · 3스텝·CFG 없음 · 5초(121프레임) 고정 · Apache 2.0"
+dir = "models/mlx/fastwan22_ti2v5b_q8"
+sampler = "dmd"
+steps = 3
+fixed_frames = 121           # 학습된 길이로 생성 후 컷 길이에 맞게 자름
+
+[models.base]
+label = "원본 모델 (고품질·느림)"
+short = "원본"
+description = "Wan2.2 TI2V-5B · 품질별 20~30스텝 · CFG 사용"
+dir = "models/mlx/wan22_ti2v5b_q8"
+
+[engine]
+idle_unload_minutes = 30     # 이 시간 동안 작업이 없으면 모델을 메모리에서 내림
+
 [keyframe]
 command = "mflux-generate"
 model = "schnell"           # Apache 2.0 (상업 이용 가능)

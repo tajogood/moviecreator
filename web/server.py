@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import collections
+import json
+import queue
 import hashlib
 import hmac
 import mimetypes
@@ -69,6 +71,152 @@ def valid_token(tok: str | None) -> bool:
 
 
 _fail = collections.deque(maxlen=50)
+
+
+# ───────────────────────── 상주 엔진 ─────────────────────────
+
+class EngineClient:
+    """web/engine.py 를 한 번 띄워두고 모델을 메모리에 유지한 채 작업을 보낸다."""
+
+    def __init__(self):
+        self.proc: subprocess.Popen | None = None
+        self.lock = threading.Lock()
+        self.events: "queue.Queue[dict]" = queue.Queue()
+        self.last_status: dict = {}
+
+    def alive(self) -> bool:
+        return self.proc is not None and self.proc.poll() is None
+
+    def start(self) -> None:
+        if self.alive():
+            return
+        env = dict(os.environ, PYTHONUNBUFFERED="1",
+                   MC_IDLE_UNLOAD_MIN=str(mc.CFG.get("engine", {}).get("idle_unload_minutes", 30)))
+        log = open(ROOT / "logs" / "engine.log", "a")
+        script = os.environ.get("MC_ENGINE_SCRIPT") or str(Path(__file__).with_name("engine.py"))
+        self.proc = subprocess.Popen([sys.executable, script],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log,
+                                     text=True, bufsize=1, cwd=ROOT, env=env)
+        self.events = queue.Queue()
+        threading.Thread(target=self._read, args=(self.proc,), daemon=True).start()
+        ev = self.events.get(timeout=120)
+        if ev.get("event") != "ready":
+            raise mc.McError(f"생성 엔진 시작 실패: {ev}")
+
+    def _read(self, proc) -> None:
+        for line in proc.stdout:
+            try:
+                ev = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if ev.get("event") == "status":
+                self.last_status = ev
+            self.events.put(ev)
+        self.events.put({"event": "exit", "code": proc.poll()})
+
+    def send(self, msg: dict) -> None:
+        self.proc.stdin.write(json.dumps(msg, ensure_ascii=False) + "\n")
+        self.proc.stdin.flush()
+
+    def run(self, job: "Job", req: dict) -> dict:
+        with self.lock:
+            self.start()
+            req = dict(req, cmd="generate", id=job.id)
+            self.send(req)
+            canceled_sent = False
+            while True:
+                if job.cancel and not canceled_sent:
+                    self.send({"cmd": "cancel"})
+                    canceled_sent = True
+                try:
+                    ev = self.events.get(timeout=0.5)
+                except queue.Empty:
+                    continue
+                kind = ev.get("event")
+                if kind == "progress" and ev.get("id") == job.id:
+                    job.stage, job.progress = ev["stage"], max(job.progress, ev["progress"])
+                elif kind == "done" and ev.get("id") == job.id:
+                    self.last_status = ev.get("memory", {})
+                    return ev
+                elif kind == "canceled" and ev.get("id") == job.id:
+                    raise mc.McError("취소됨")
+                elif kind == "error" and ev.get("id") == job.id:
+                    raise mc.McError("생성 오류: " + ev.get("error", ""))
+                elif kind == "exit":
+                    self.proc = None
+                    tail = (ROOT / "logs" / "engine.log").read_text(errors="replace").strip().splitlines()[-6:]
+                    raise mc.McError("생성 엔진이 종료되었습니다 (메모리 부족 가능). " + " / ".join(tail))
+
+    def status(self) -> dict:
+        if not self.alive():
+            return {"running": False}
+        return {"running": True, **{k: v for k, v in self.last_status.items() if k not in ("event", "id")}}
+
+    def unload(self) -> None:
+        if self.alive() and not self.lock.locked():
+            self.send({"cmd": "unload", "what": "all"})
+
+
+ENGINE = EngineClient()
+
+
+# ───────────────────────── 모델·예상 시간 ─────────────────────────
+
+TIMINGS = ROOT / "logs" / "timings.json"
+
+
+def models_available() -> dict:
+    out = {}
+    for key, m in mc.CFG["models"].items():
+        d = mc.rel(m["dir"])
+        out[key] = {"label": m["label"], "description": m.get("description", ""),
+                    "available": (d / "model.safetensors").exists()}
+    return out
+
+
+def default_model() -> str:
+    av = models_available()
+    return next((k for k in ("fast", "base") if av.get(k, {}).get("available")), "base")
+
+
+def job_params(p: "mc.Project", shot: dict, quality: str, model: str) -> dict:
+    m = mc.CFG["models"][model]
+    w, h = mc.gen_size(p.aspect, quality)
+    if m.get("fixed_frames"):
+        frames = int(m["fixed_frames"])
+    else:
+        frames = mc.frames_for(float(shot["seconds"]), quality)
+    steps = int(m.get("steps") or mc.CFG["quality"][quality]["steps"])
+    return {"width": w, "height": h, "frames": frames, "steps": steps}
+
+
+def estimate_job(p: "mc.Project", shot: dict, quality: str, model: str) -> int:
+    """실측 기록이 있으면 픽셀·프레임 비례로, 없으면 기본 공식으로 추정."""
+    jp = job_params(p, shot, quality, model)
+    work = jp["width"] * jp["height"] * jp["frames"]
+    try:
+        hist = [h for h in json.loads(TIMINGS.read_text()) if h["model"] == model][-12:]
+    except Exception:
+        hist = []
+    if hist:
+        rate = sorted(h["total"] / h["work"] for h in hist)[len(hist) // 2]
+        same = [h for h in hist if h["work"] == work]
+        return int(sorted(x["total"] for x in same)[len(same) // 2]) if same else int(rate * work)
+    if model == "fast":
+        ratio = work / (480 * 864 * 49)
+        return int(60 + 90 * ratio)
+    return mc.estimate_seconds(p.aspect, quality, float(shot["seconds"]))
+
+
+def record_timing(model: str, params: dict, timings: dict) -> None:
+    try:
+        hist = json.loads(TIMINGS.read_text()) if TIMINGS.exists() else []
+    except Exception:
+        hist = []
+    hist.append({"model": model, "work": params["width"] * params["height"] * params["frames"],
+                 **params, **timings, "time": int(time.time())})
+    TIMINGS.parent.mkdir(exist_ok=True)
+    TIMINGS.write_text(json.dumps(hist[-200:]))
 
 
 # ───────────────────────── 작업 큐 ─────────────────────────
@@ -218,34 +366,40 @@ def stream_process(job: Job, cmd: list[str], parse=None) -> None:
 def run_generate(job: Job) -> None:
     proj = mc.Project(job.project)
     shot = proj.shot(job.sid)
-    q, seed = job.opts["quality"], int(job.opts["seed"])
-    out = mc.take_path(proj, shot, q, seed)
+    if shot["type"] != "ai":
+        raise mc.McError("AI 컷이 아닙니다")
+    if not shot.get("prompt", "").strip():
+        raise mc.McError("프롬프트가 비어 있습니다")
+    q, seed, model = job.opts["quality"], int(job.opts["seed"]), job.opts["model"]
+    m = mc.CFG["models"][model]
+    mdir = mc.rel(m["dir"])
+    if not (mdir / "model.safetensors").exists():
+        raise mc.McError(f"모델이 설치되어 있지 않습니다: {m['label']}")
+    base = mc.rel(mc.CFG["models"]["base"]["dir"])
+    params = job_params(proj, shot, q, model)
+    stamp = time.strftime("%m%d%H%M%S")
+    out = proj.dir / "takes" / f"{shot['id']}_{q}-{model}_s{seed}_{stamp}.mp4"
+    kf = proj.path(shot["keyframe"]) if shot.get("keyframe") else None
+    req = {"model_dir": str(mdir), "t5_source": str(base / "t5_encoder.safetensors"),
+           "vae_path": str(base / "vae.safetensors"), "prompt": proj.video_prompt(shot),
+           "negative": proj.negative(), "image": str(kf) if kf and kf.exists() else None,
+           "seed": seed, "output": str(out), "sampler": m.get("sampler", ""), **params}
     free = mc.memory_free_pct()
     if free is not None and free < mc.CFG["video"]["min_free_memory_pct"]:
         job.add_log(f"⚠ 메모리 여유 {free}% — 다른 앱을 닫으면 빨라집니다")
-    cmd = mc.generate_cmd(proj, shot, q, seed, out)
-
-    def parse(line: str) -> None:
-        for key, label, pct in STAGES:
-            if line.startswith(key) or f" {key}" in line[:40]:
-                job.stage, job.progress = label, max(job.progress, pct)
-        m = re.search(r"Diffusion:\s*\d+%\|.*?\|\s*(\d+)/(\d+)", line)
-        if m:
-            done, total = int(m.group(1)), int(m.group(2))
-            job.stage = f"영상 생성 중 ({done}/{total} 스텝)"
-            job.progress = 0.15 + 0.70 * done / max(1, total)
-
-    job.stage = "준비 중"
-    stream_process(job, cmd, parse)
+    job.stage = "생성 엔진 준비 중"
+    ev = ENGINE.run(job, req)
+    t = ev.get("timings", {})
+    job.add_log("소요: " + ", ".join(f"{k} {v}s" for k, v in t.items()))
+    record_timing(model, params, t)
     if not out.exists():
         raise mc.McError("영상 파일이 만들어지지 않았습니다.")
     proj.reload()
     sh = proj.shot(job.sid)
-    # 첫 결과이거나 더 높은 품질이면 자동 채택
     rank = {"draft": 0, "standard": 1, "final": 2}
     cur = sh.get("take", "")
-    cur_q = re.search(r"_(draft|standard|final)_s", cur)
-    if not cur or not proj.path(cur).exists() or (cur_q and rank[q] > rank[cur_q.group(1)]):
+    cur_q = re.search(r"_(draft|standard|final)", cur)
+    if not cur or not proj.path(cur).exists() or (cur_q and rank[q] >= rank[cur_q.group(1)]):
         sh["take"] = proj.relpath(out)
         proj.save()
     job.result = proj.relpath(out)
@@ -268,6 +422,10 @@ def run_keyframe(job: Job) -> None:
 
 def run_reel(job: Job) -> None:
     proj = mc.Project(job.project)
+    missing = [s.get("role") or s["id"] for s in proj.shots
+               if (s["type"] == "ai" and not s.get("take")) or (s["type"] == "video" and not s.get("video"))]
+    if missing:
+        raise mc.McError("영상이 준비되지 않은 컷: " + ", ".join(missing))
 
     def prog(p: float, s: str) -> None:
         job.progress, job.stage = p, s
@@ -345,11 +503,20 @@ def info():
         "qualities": {k: {"label": v["label"], "steps": v["steps"]} for k, v in mc.CFG["quality"].items()},
         "grades": {"none": "기본", "warm": "따뜻하게", "cool": "시원하게", "film": "필름", "vivid": "선명하게", "bw": "흑백"},
         "templates": mc.templates(),
+        "models": models_available(),
+        "default_model": default_model(),
+        "engine": ENGINE.status(),
         "doctor": [{"name": n, "ok": ok, "detail": d} for n, ok, d in rows],
         "memory_free": mc.memory_free_pct(),
         "public_url": (ROOT / "logs" / "public_url.txt").read_text().strip()
         if (ROOT / "logs" / "public_url.txt").exists() else "",
     }
+
+
+@app.post("/api/engine/unload")
+def engine_unload():
+    ENGINE.unload()
+    return {"ok": True}
 
 
 @app.get("/api/estimate")
@@ -360,12 +527,13 @@ def estimate(aspect: str, quality: str, seconds: float):
 # ── 프로젝트
 
 def project_view(p: mc.Project) -> dict:
+    model = p.data.get("model") or default_model()
     shots = []
     for s in p.shots:
         v = dict(s)
         if s["type"] == "ai":
             v["takes"] = p.takes(s["id"])
-            v["estimates"] = {q: mc.estimate_seconds(p.aspect, q, float(s["seconds"])) for q in mc.QUALITIES}
+            v["estimates"] = {q: estimate_job(p, s, q, model) for q in mc.QUALITIES}
         else:
             src = p.path(s["video"]) if s.get("video") else None
             v["video_duration"] = mc.ffprobe(src)["duration"] if src and src.exists() else 0
@@ -373,8 +541,10 @@ def project_view(p: mc.Project) -> dict:
     music = sorted(f"uploads/music/{f.name}" for f in (p.dir / "uploads" / "music").glob("*") if f.is_file()) \
         if (p.dir / "uploads" / "music").exists() else []
     data = {k: v for k, v in p.data.items() if k != "shots"}
-    return {"name": p.name, **data, "shots": shots, "finals": p.finals(), "music_files": music,
-            "total_seconds": p.total_seconds(), "output": mc.output_size(p.aspect)}
+    auto = {q: sum(estimate_job(p, s, q, model) for s in p.shots if s["type"] == "ai") + 20 + 25 * len(p.shots)
+            for q in ("standard", "final")}
+    return {"name": p.name, **data, "model": model, "shots": shots, "finals": p.finals(), "music_files": music,
+            "total_seconds": p.total_seconds(), "output": mc.output_size(p.aspect), "auto_estimates": auto}
 
 
 @app.get("/api/projects")
@@ -395,7 +565,7 @@ def get_project(name: str):
     return project_view(mc.Project(name))
 
 
-EDITABLE_PROJECT = {"title", "aspect", "music", "grade", "style_suffix", "keyframe_suffix", "negative_prompt"}
+EDITABLE_PROJECT = {"title", "aspect", "music", "grade", "style_suffix", "keyframe_suffix", "negative_prompt", "model"}
 
 
 @app.patch("/api/projects/{name}")
@@ -407,6 +577,8 @@ async def patch_project(name: str, request: Request):
             continue
         if k == "aspect" and v not in mc.CFG["aspect"]:
             raise HTTPException(400, "알 수 없는 비율")
+        if k == "model" and v not in mc.CFG["models"]:
+            raise HTTPException(400, "알 수 없는 모델")
         if k == "grade" and v not in mc.CFG["grade"]:
             raise HTTPException(400, "알 수 없는 색감")
         p.data[k] = str(v)
@@ -631,6 +803,17 @@ def jobs():
     return [j.view() for j in reversed(QUEUE.jobs)]
 
 
+def enqueue_generate(p: "mc.Project", s: dict, q: str, model: str, seed: int) -> Job:
+    seed = seed or random.randint(1, 99999)
+    if not s.get("prompt", "").strip():   # 사진만 있는 컷: 기본 움직임 프롬프트
+        s["prompt"] = "Slow cinematic push-in, subtle natural motion, soft light shifting."
+        p.save()
+    return QUEUE.add(Job("generate", p.name, s["id"], quality=q, seed=seed, model=model,
+                         estimate=estimate_job(p, s, q, model),
+                         label=f"{p.data['title']} · {s.get('role') or s['id']} · "
+                               f"{mc.CFG['quality'][q]['label']} · {mc.CFG['models'][model]['short']}"))
+
+
 @app.post("/api/jobs")
 async def add_job(request: Request):
     b = await request.json()
@@ -645,14 +828,38 @@ async def add_job(request: Request):
         q = b.get("quality", "draft")
         if q not in mc.QUALITIES:
             raise HTTPException(400, "알 수 없는 품질")
+        model = b.get("model") or p.data.get("model") or default_model()
+        if model not in mc.CFG["models"]:
+            raise HTTPException(400, "알 수 없는 모델")
         count = max(1, min(int(b.get("count", 1)), 4))
+        return [enqueue_generate(p, s, q, model, int(b.get("seed") or s.get("seed") or 0) if i == 0 else 0).view()
+                for i in range(count)]
+    if kind == "auto":
+        # 시안 없이 바로: 영상이 없는(또는 품질이 낮은) AI 컷을 생성한 뒤 최종 영상까지
+        q = b.get("quality", "standard")
+        model = b.get("model") or p.data.get("model") or default_model()
+        if q not in mc.QUALITIES or model not in mc.CFG["models"]:
+            raise HTTPException(400, "잘못된 설정")
+        empty = [s.get("role") or s["id"] for s in p.shots if s["type"] == "ai" and not s.get("prompt", "").strip()
+                 and not s.get("keyframe")]
+        if empty:
+            raise HTTPException(400, "프롬프트나 사진이 없는 컷: " + ", ".join(empty))
+        novid = [s.get("role") or s["id"] for s in p.shots if s["type"] == "video" and not s.get("video")]
+        if novid:
+            raise HTTPException(400, "동영상이 없는 컷: " + ", ".join(novid))
+        rank = {"draft": 0, "standard": 1, "final": 2}
+        busy = {j.sid for j in QUEUE.jobs if j.project == name and j.status in ("queued", "running")}
         out = []
-        for i in range(count):
-            seed = int(b.get("seed") or s.get("seed") or 0) if i == 0 else 0
-            seed = seed or random.randint(1, 99999)
-            out.append(QUEUE.add(Job("generate", name, s["id"], quality=q, seed=seed,
-                                     estimate=mc.estimate_seconds(p.aspect, q, float(s["seconds"])),
-                                     label=f"{p.data['title']} · {s.get('role') or s['id']} · {mc.CFG['quality'][q]['label']}")).view())
+        for s in p.shots:
+            if s["type"] != "ai" or s["id"] in busy:
+                continue
+            m = re.search(r"_(draft|standard|final)", s.get("take", ""))
+            if s.get("take") and p.path(s["take"]).exists() and m and rank[m.group(1)] >= rank[q] and not b.get("regenerate"):
+                continue
+            out.append(enqueue_generate(p, s, q, model, int(s.get("seed") or 0)).view())
+        total = sum(j["estimate"] for j in out)
+        out.append(QUEUE.add(Job("reel", name, estimate=int(20 + 25 * len(p.shots)),
+                                 label=f"{p.data['title']} · 최종 영상 만들기")).view())
         return out
     if kind == "keyframe":
         s = p.shot(b.get("sid"))
