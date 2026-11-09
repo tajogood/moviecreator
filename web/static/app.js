@@ -204,6 +204,10 @@ function mediaFor(p, s) {
     if (!s.video) return `<div class="media empty" ${style} data-pick="video" data-sid="${s.id}">동영상을 올려주세요<br>(클릭 또는 끌어다 놓기)</div>`;
     return `<div class="media" ${style}><video src="${fileUrl(p.name, s.video)}#t=${Math.max(0.1, +s.start || 0)}" controls playsinline preload="metadata" muted></video><span class="tag">내 영상</span></div>`;
   }
+  if (s.motion === "camera" && s.keyframe) {
+    if (s.camera_preview) { const [f, q] = s.camera_preview.split("?"); return `<div class="media" ${style}><video src="${fileUrl(p.name, f)}?${q}" controls playsinline loop muted autoplay></video><span class="tag">카메라 무빙</span></div>`; }
+    return `<div class="media" ${style}><img src="${fileUrl(p.name, s.keyframe)}" alt="사진"><span class="tag">사진 그대로 · 카메라 무빙</span></div>`;
+  }
   if (s.take) return `<div class="media" ${style}><video src="${fileUrl(p.name, s.take)}#t=0.1" controls playsinline loop muted preload="metadata" ${s.keyframe ? `poster="${fileUrl(p.name, s.keyframe)}"` : ""}></video><span class="tag">채택</span></div>`;
   if (s.keyframe) return `<div class="media" ${style}><img src="${fileUrl(p.name, s.keyframe)}" alt="키 이미지"><span class="tag">사진</span></div>`;
   return `<div class="media empty" ${style} data-pick="photo" data-sid="${s.id}">사진 없이 프롬프트로 생성<br><br>사진을 넣으려면 클릭 또는 끌어다 놓기</div>`;
@@ -242,6 +246,15 @@ function aiCard(p, s, i, jobs) {
           <button class="small ghost" data-kfgen title="mflux로 키 이미지 생성 (처음엔 모델 다운로드)">AI로 사진 만들기</button>
         </div>
       </div>
+      ${s.keyframe ? `<div class="row">
+        <label class="f">움직임 방식<select data-f="motion">
+          <option value="camera" ${s.motion === "camera" ? "selected" : ""}>사진 그대로 + 카메라 무빙 (즉시, 실사 유지)</option>
+          <option value="ai" ${s.motion !== "camera" ? "selected" : ""}>AI로 움직이기 (원본 모델, 느림)</option></select></label>
+        ${s.motion === "camera" ? `<label class="f">카메라 무빙<select data-f="camera">${Object.entries(state.info.camera_moves).map(([k, v]) => `<option value="${k}" ${k === s.camera ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label>
+        <div style="flex:0 1 auto;align-self:end"><button class="small" data-campreview>미리보기</button></div>` : ""}
+      </div>` : ""}
+      ${s.motion === "camera" && s.keyframe ? `<div class="muted small">AI 생성 없이 사진을 그대로 쓰고 카메라만 움직입니다. 최종 영상 만들 때 자동으로 처리됩니다.</div>` : `
+      ${s.keyframe && s.model_used === "base" ? `<div class="muted small">사진 컷은 사진을 유지하기 위해 원본 모델로 생성합니다 (컷당 수 분).</div>` : ""}
       <div class="gen-btns">
         ${["draft", "standard", "final"].map((q) => `<button class="${q === "draft" ? "primary" : ""}" data-gen="${q}">
           ${esc(state.info.qualities[q].label)} 생성<small>${fmtMin(est[q])}</small></button>`).join("")}
@@ -254,7 +267,7 @@ function aiCard(p, s, i, jobs) {
           <div class="tb">${t.file === s.take ? `<button disabled>✓ 채택</button>` : `<button data-take="${esc(t.file)}">채택</button>`}
             <button class="ghost" data-seed="${t.seed ?? 0}" title="이 시드로 고정">시드</button>
             <button class="ghost danger" data-delfile="${esc(t.file)}" title="삭제">✕</button></div></div>`).join("")}</div></div>` : ""}
-      <div class="shot-tools">${s.take ? `<button class="small ghost" data-derive>이 영상 끝에서 이어지는 컷 만들기</button>` : ""}</div>
+      <div class="shot-tools">${s.take ? `<button class="small ghost" data-derive>이 영상 끝에서 이어지는 컷 만들기</button>` : ""}</div>`}
     </div></section>`;
 }
 
@@ -350,7 +363,13 @@ function bindEditor(p) {
     const base = `/api/projects/${encodeURIComponent(name)}/shots/${sid}`;
     const patch = guard(async (body, rerender = false) => { await api(base, { method: "PATCH", body }); if (rerender) renderEditor(name, true); });
 
-    card.querySelectorAll("[data-f]").forEach((el) => (el.onchange = () => patch({ [el.dataset.f]: el.value }, ["seconds", "fit", "start"].includes(el.dataset.f))));
+    card.querySelectorAll("[data-f]").forEach((el) => (el.onchange = () => patch({ [el.dataset.f]: el.value }, ["seconds", "fit", "start", "motion", "camera"].includes(el.dataset.f))));
+    const cprev = card.querySelector("[data-campreview]");
+    if (cprev) cprev.onclick = guard(async () => {
+      cprev.disabled = true; cprev.textContent = "만드는 중…";
+      await api(`${base}/camera_preview`, { method: "POST" });
+      renderEditor(name, true);
+    });
     card.querySelectorAll("[data-move]").forEach((b) => (b.onclick = guard(async () => { await api(`${base}/move`, { method: "POST", body: { dir: +b.dataset.move } }); renderEditor(name, true); })));
     const del = card.querySelector("[data-delshot]");
     if (del) del.onclick = guard(async () => { if (!confirm("이 컷을 삭제할까요?")) return; await api(base, { method: "DELETE" }); renderEditor(name, true); });

@@ -434,7 +434,8 @@ def run_keyframe(job: Job) -> None:
 def run_reel(job: Job) -> None:
     proj = mc.Project(job.project)
     missing = [s.get("role") or s["id"] for s in proj.shots
-               if (s["type"] == "ai" and not s.get("take")) or (s["type"] == "video" and not s.get("video"))]
+               if (s["type"] == "ai" and not s.get("take") and not mc.is_camera_shot(s))
+               or (s["type"] == "video" and not s.get("video"))]
     if missing:
         raise mc.McError("영상이 준비되지 않은 컷: " + ", ".join(missing))
 
@@ -515,6 +516,7 @@ def info():
         "grades": {"none": "기본", "warm": "따뜻하게", "cool": "시원하게", "film": "필름", "vivid": "선명하게", "bw": "흑백"},
         "templates": mc.templates(),
         "models": models_available(),
+        "camera_moves": mc.CAMERA_MOVES,
         "default_model": default_model(),
         "engine": ENGINE.status(),
         "doctor": [{"name": n, "ok": ok, "detail": d} for n, ok, d in rows],
@@ -544,7 +546,10 @@ def project_view(p: mc.Project) -> dict:
         v = dict(s)
         if s["type"] == "ai":
             v["takes"] = p.takes(s["id"])
-            v["estimates"] = {q: estimate_job(p, s, q, model) for q in mc.QUALITIES}
+            v["estimates"] = {q: estimate_job(p, s, q, model_for(s, model)) for q in mc.QUALITIES}
+            v["model_used"] = model_for(s, model)
+            cp = p.dir / "takes" / f"{s['id']}_camera.mp4"
+            v["camera_preview"] = f"takes/{cp.name}?v={int(cp.stat().st_mtime)}" if cp.exists() else ""
         else:
             src = p.path(s["video"]) if s.get("video") else None
             v["video_duration"] = mc.ffprobe(src)["duration"] if src and src.exists() else 0
@@ -552,7 +557,8 @@ def project_view(p: mc.Project) -> dict:
     music = sorted(f"uploads/music/{f.name}" for f in (p.dir / "uploads" / "music").glob("*") if f.is_file()) \
         if (p.dir / "uploads" / "music").exists() else []
     data = {k: v for k, v in p.data.items() if k != "shots"}
-    auto = {q: sum(estimate_job(p, s, q, model) for s in p.shots if s["type"] == "ai") + 20 + 25 * len(p.shots)
+    auto = {q: sum(estimate_job(p, s, q, model_for(s, model)) for s in p.shots
+                   if s["type"] == "ai" and not mc.is_camera_shot(s) and not s.get("take")) + 20 + 25 * len(p.shots)
             for q in ("standard", "final")}
     return {"name": p.name, **data, "model": model, "shots": shots, "finals": p.finals(), "music_files": music,
             "total_seconds": p.total_seconds(), "output": mc.output_size(p.aspect), "auto_estimates": auto}
@@ -609,7 +615,7 @@ def delete_project(name: str):
 # ── 컷
 
 EDITABLE_SHOT = {"seconds": float, "role": str, "prompt": str, "keyframe_prompt": str, "seed": int,
-                 "start": float, "fit": str, "take": str, "keyframe": str}
+                 "start": float, "fit": str, "take": str, "keyframe": str, "motion": str, "camera": str}
 
 
 def _insert(p: mc.Project, shot: dict, after: str | None) -> None:
@@ -650,6 +656,10 @@ async def patch_shot(name: str, sid: str, request: Request):
             raise HTTPException(400, f"잘못된 값: {k}")
         if k == "seconds":
             v = max(1.0, min(v, 5.0 if s["type"] == "ai" else 60.0))
+        if k == "motion" and v not in ("ai", "camera"):
+            raise HTTPException(400, "알 수 없는 움직임 방식")
+        if k == "camera" and v not in mc.CAMERA_MOVES:
+            raise HTTPException(400, "알 수 없는 카메라 무빙")
         if k == "fit" and v not in ("crop", "blur", "fit"):
             raise HTTPException(400, "알 수 없는 맞춤 방식")
         if k in ("take", "keyframe") and v and not p.path(v).exists():
@@ -704,6 +714,25 @@ async def derive_shot(name: str, sid: str, request: Request):
     new["keyframe"] = p.relpath(dst)
     _insert(p, new, sid)
     p.save()
+    return project_view(p)
+
+
+@app.post("/api/projects/{name}/shots/{sid}/camera_preview")
+def camera_preview(name: str, sid: str):
+    """카메라 무빙을 바로 렌더링해 미리보기 (수 초)."""
+    p = mc.Project(name)
+    s = p.shot(sid)
+    if not s.get("keyframe"):
+        raise HTTPException(400, "사진이 없습니다")
+    W, H = mc.output_size(p.aspect)
+    W, H = W // 2, H // 2   # 미리보기는 절반 해상도
+    photo = p.path(s.get("keyframe_source") or s["keyframe"])
+    if not photo.exists():
+        photo = p.path(s["keyframe"])
+    out = p.dir / "takes" / f"{sid}_camera.mp4"
+    enc = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
+    mc.camera_move_clip(photo, out, W, H, float(s["seconds"]), 30, s.get("camera") or "push_in",
+                        "setsar=1,format=yuv420p", enc)
     return project_view(p)
 
 
@@ -778,6 +807,11 @@ async def upload(name: str, kind: str = Form(...), upload_id: str = Form(...), i
             mc.crop_image(orig, kf, p.aspect)
             shot["keyframe"] = p.relpath(kf)
             shot["keyframe_source"] = p.relpath(orig)
+            # 실사 사진은 기본적으로 '사진 그대로 + 카메라 무빙' (AI 생성은 사진을 망가뜨리기 쉬움)
+            if not shot.get("take"):
+                shot["motion"] = "camera"
+                moves = list(mc.CAMERA_MOVES)
+                shot["camera"] = moves[(sum(1 for s in p.shots if s.get("motion") == "camera") - 1) % len(moves)]
         elif kind == "video":
             dest_dir = p.dir / "uploads" / "videos"
             dest_dir.mkdir(parents=True, exist_ok=True)
@@ -814,7 +848,13 @@ def jobs():
     return [j.view() for j in reversed(QUEUE.jobs)]
 
 
+def model_for(s: dict, model: str) -> str:
+    """증류(빠른) 모델은 사진 조건을 거의 무시해 장면이 바뀐다 → 사진 컷은 원본 모델."""
+    return "base" if s.get("keyframe") else model
+
+
 def enqueue_generate(p: "mc.Project", s: dict, q: str, model: str, seed: int) -> Job:
+    model = model_for(s, model)
     seed = seed or random.randint(1, 99999)
     if not s.get("prompt", "").strip():   # 사진만 있는 컷: 기본 움직임 프롬프트
         s["prompt"] = "Slow cinematic push-in, subtle natural motion, soft light shifting."
@@ -853,6 +893,7 @@ async def add_job(request: Request):
             raise HTTPException(400, "잘못된 설정")
         empty = [s.get("role") or s["id"] for s in p.shots if s["type"] == "ai" and not s.get("prompt", "").strip()
                  and not s.get("keyframe")]
+        # 바로 만들기에서 생성할 컷 수 (카메라 무빙 컷은 즉시)
         if empty:
             raise HTTPException(400, "프롬프트나 사진이 없는 컷: " + ", ".join(empty))
         novid = [s.get("role") or s["id"] for s in p.shots if s["type"] == "video" and not s.get("video")]
@@ -862,7 +903,7 @@ async def add_job(request: Request):
         busy = {j.sid for j in QUEUE.jobs if j.project == name and j.status in ("queued", "running")}
         out = []
         for s in p.shots:
-            if s["type"] != "ai" or s["id"] in busy:
+            if s["type"] != "ai" or s["id"] in busy or mc.is_camera_shot(s):
                 continue
             m = re.search(r"_(draft|standard|final)", s.get("take", ""))
             if s.get("take") and p.path(s["take"]).exists() and m and rank[m.group(1)] >= rank[q] and not b.get("regenerate"):

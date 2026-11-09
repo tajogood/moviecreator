@@ -275,6 +275,8 @@ class Project:
                 s.setdefault("keyframe_prompt", "")
                 s.setdefault("seed", 0)
                 s.setdefault("take", "")
+                s.setdefault("motion", "ai")
+                s.setdefault("camera", "push_in")
             else:
                 s.setdefault("video", "")
                 s.setdefault("start", 0.0)
@@ -328,6 +330,8 @@ class Project:
     def takes(self, sid: str) -> list[dict]:
         out = []
         for f in sorted((self.dir / "takes").glob(f"{sid}_*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
+            if f.name == f"{sid}_camera.mp4":
+                continue
             m = re.match(rf"{re.escape(sid)}_(draft|standard|final)(?:-(\w+))?_s(\d+)_", f.name)
             out.append({"file": f"takes/{f.name}", "quality": m.group(1) if m else "",
                         "model": (m.group(2) or "base") if m else "",
@@ -480,6 +484,45 @@ def _fit_filter(fit: str, W: int, H: int) -> str:
     return f"scale={W}:{H}:flags=lanczos:force_original_aspect_ratio=increase,crop={W}:{H}"
 
 
+CAMERA_MOVES = {
+    "push_in": "천천히 다가가기", "pull_out": "천천히 물러나기", "pan_right": "오른쪽으로 이동",
+    "pan_left": "왼쪽으로 이동", "tilt_up": "위로 올라가기", "tilt_down": "아래로 내려가기",
+}
+
+
+def is_camera_shot(s: dict) -> bool:
+    return s.get("type") == "ai" and s.get("motion") == "camera" and bool(s.get("keyframe"))
+
+
+def camera_move_clip(photo: Path, out: Path, W: int, H: int, sec: float, fps: int, move: str,
+                     post: str, enc: list, log: Log | None = None, stop=None) -> None:
+    """사진을 2배 해상도로 크롭한 뒤 부드러운 가감속(smoothstep) 카메라 이동을 만든다."""
+    if photo.suffix.lower() in (".heic", ".heif") and shutil.which("sips"):
+        jpg = photo.with_suffix(".jpg")
+        if not jpg.exists():
+            run(["sips", "-s", "format", "jpeg", str(photo), "--out", str(jpg)])
+        photo = jpg
+    n = max(2, int(round(sec * fps)))
+    p = f"(on/{n - 1})"
+    e = f"({p}*{p}*(3-2*{p}))"             # ease in-out
+    zmax = 1.12
+    cx, cy = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+    moves = {
+        "push_in":   (f"1+{zmax - 1}*{e}", cx, cy),
+        "pull_out":  (f"{zmax}-{zmax - 1}*{e}", cx, cy),
+        "pan_right": (f"{zmax}", f"(iw-iw/zoom)*{e}", cy),
+        "pan_left":  (f"{zmax}", f"(iw-iw/zoom)*(1-{e})", cy),
+        "tilt_up":   (f"{zmax}", cx, f"(ih-ih/zoom)*(1-{e})"),
+        "tilt_down": (f"{zmax}", cx, f"(ih-ih/zoom)*{e}"),
+    }
+    z, x, y = moves.get(move, moves["push_in"])
+    W2, H2 = W * 2, H * 2
+    vf = (f"scale={W2}:{H2}:flags=lanczos:force_original_aspect_ratio=increase,crop={W2}:{H2},"
+          f"zoompan=z='{z}':x='{x}':y='{y}':d={n}:s={W}x{H}:fps={fps},{post}")
+    run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-loop", "1", "-i", str(photo), "-vf", vf,
+         "-frames:v", str(n), "-an", *enc, str(out)], log, stop)
+
+
 def build_reel(proj: Project, music: str | None = None, log: Log | None = None,
                progress: Callable[[float, str], None] | None = None,
                stop: Callable[[], bool] | None = None) -> Path:
@@ -524,6 +567,12 @@ def build_reel(proj: Project, music: str | None = None, log: Log | None = None,
                 log(f"  {label}: 영상이 {pad:.1f}초 짧아 마지막 장면을 늘립니다")
             run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{start:.3f}", "-i", str(src),
                  "-t", f"{sec:g}", "-vf", vf, "-t", f"{sec:g}", "-an", *enc, str(norm)], log, stop)
+        elif is_camera_shot(s):
+            # 사진 그대로 + 시네마틱 카메라 무빙 (AI 생성 없음 → 실사 100% 유지)
+            photo = proj.path(s.get("keyframe_source") or s["keyframe"])
+            if not photo.exists():
+                photo = proj.path(s["keyframe"])
+            camera_move_clip(photo, norm, W, H, sec, FPS, s.get("camera") or "push_in", post, enc, log, stop)
         else:
             if not s.get("take"):
                 die(f"{label}: 채택한 영상이 없습니다. 먼저 생성하고 '채택'을 누르세요.")
